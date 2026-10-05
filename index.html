@@ -1,0 +1,1048 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>学校備品 貸出・返却管理システム</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Noto Sans JP', 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+        /* Custom animations */
+        @keyframes pulse-slow {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.85; }
+        }
+        .overdue-card {
+            animation: pulse-slow 3s infinite ease-in-out;
+        }
+    </style>
+</head>
+<body class="text-gray-800 min-h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="bg-indigo-700 text-white shadow-lg sticky top-0 z-30">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex justify-between items-center">
+            <div class="flex items-center space-x-3">
+                <div class="bg-white/20 p-2 rounded-xl backdrop-blur-md">
+                    <i class="fa-solid fa-boxes-packing text-2xl text-amber-300"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl sm:text-2xl font-bold tracking-tight leading-none">備品貸出・返却管理</h1>
+                    <p class="text-xs text-indigo-200 mt-1 hidden sm:block">学校の工具・機材貸出状況のリアルタイム共有システム</p>
+                </div>
+            </div>
+
+            <!-- User Auth & Action Buttons -->
+            <div class="flex items-center space-x-2 sm:space-x-3">
+                <button id="helpBtn" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition flex items-center space-x-1 border border-indigo-400/30">
+                    <i class="fa-solid fa-circle-question"></i>
+                    <span class="hidden sm:inline">ヘルプ・公開方法</span>
+                </button>
+                
+                <button id="configBtn" class="bg-indigo-800 hover:bg-indigo-900 text-indigo-100 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition flex items-center space-x-1 border border-indigo-600">
+                    <i class="fa-solid fa-gear"></i>
+                    <span class="hidden sm:inline">Firebase設定</span>
+                </button>
+
+                <!-- Dynamic Auth Section -->
+                <div id="authSection" class="flex items-center">
+                    <!-- Loading state -->
+                    <div id="authLoading" class="text-xs text-indigo-200 py-1 px-2">
+                        <i class="fa-solid fa-spinner fa-spin"></i>
+                    </div>
+
+                    <!-- Logged Out -->
+                    <button id="loginBtn" class="hidden bg-amber-400 hover:bg-amber-300 text-indigo-950 font-bold px-3 py-1.5 rounded-lg text-xs sm:text-sm transition flex items-center space-x-1.5 shadow-md">
+                        <i class="fa-brands fa-google"></i>
+                        <span>Googleでログイン</span>
+                    </button>
+
+                    <!-- Logged In User Profile -->
+                    <div id="userProfile" class="hidden flex items-center space-x-2 bg-indigo-800/80 p-1 pl-2 pr-1.5 rounded-full border border-indigo-500/40">
+                        <img id="userAvatar" class="w-7 h-7 rounded-full bg-indigo-300 border border-white" src="" alt="User Avatar">
+                        <span id="userName" class="text-xs sm:text-sm font-medium max-w-[100px] sm:max-w-[140px] truncate"></span>
+                        <button id="logoutBtn" title="ログアウト" class="bg-indigo-900/80 hover:bg-red-600 text-indigo-200 hover:text-white p-1.5 rounded-full transition text-xs">
+                            <i class="fa-solid fa-right-from-bracket"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+        <!-- Status Notification Banner for Firebase Setup status -->
+        <div id="statusBanner" class="hidden mb-6 p-4 rounded-xl shadow-sm border flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <i id="statusIcon" class="text-xl"></i>
+                <div>
+                    <h3 id="statusTitle" class="font-bold text-sm"></h3>
+                    <p id="statusDesc" class="text-xs text-gray-600 mt-0.5"></p>
+                </div>
+            </div>
+            <button id="statusActionBtn" class="text-xs font-bold px-3 py-1.5 rounded-lg transition shrink-0"></button>
+        </div>
+
+        <!-- Metric Summary Cards -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-6">
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
+                <div>
+                    <p class="text-xs text-gray-500 font-medium">全貸出件数</p>
+                    <p id="countTotal" class="text-2xl font-bold text-gray-800 mt-1">0</p>
+                </div>
+                <div class="bg-indigo-50 p-3 rounded-xl text-indigo-600">
+                    <i class="fa-solid fa-clipboard-list text-xl"></i>
+                </div>
+            </div>
+
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
+                <div>
+                    <p class="text-xs text-gray-500 font-medium">貸出中 (未返却)</p>
+                    <p id="countActive" class="text-2xl font-bold text-blue-600 mt-1">0</p>
+                </div>
+                <div class="bg-blue-50 p-3 rounded-xl text-blue-600">
+                    <i class="fa-solid fa-hand-holding-box text-xl"></i>
+                </div>
+            </div>
+
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
+                <div>
+                    <p class="text-xs text-gray-500 font-medium">延滞中 (期限切れ)</p>
+                    <p id="countOverdue" class="text-2xl font-bold text-red-600 mt-1">0</p>
+                </div>
+                <div class="bg-red-50 p-3 rounded-xl text-red-600">
+                    <i class="fa-solid fa-triangle-exclamation text-xl"></i>
+                </div>
+            </div>
+
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
+                <div>
+                    <p class="text-xs text-gray-500 font-medium">返却済み</p>
+                    <p id="countReturned" class="text-2xl font-bold text-emerald-600 mt-1">0</p>
+                </div>
+                <div class="bg-emerald-50 p-3 rounded-xl text-emerald-600">
+                    <i class="fa-solid fa-circle-check text-xl"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Controls Header: Add Button, Search, Filters -->
+        <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 mb-6 space-y-4">
+            <div class="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3">
+                
+                <!-- Add Equipment Button -->
+                <button id="openAddModalBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-5 rounded-xl shadow-md transition flex items-center justify-center space-x-2 text-sm">
+                    <i class="fa-solid fa-plus text-base"></i>
+                    <span>新規貸出を登録する</span>
+                </button>
+
+                <!-- Search Input -->
+                <div class="relative flex-grow max-w-md">
+                    <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                    </div>
+                    <input type="text" id="searchInput" placeholder="備品名や借りた人の名前で検索..." 
+                           class="w-full pl-10 pr-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition">
+                </div>
+            </div>
+
+            <!-- Filter Buttons -->
+            <div class="flex items-center space-x-1.5 overflow-x-auto pb-1 text-xs sm:text-sm no-scrollbar">
+                <span class="text-gray-500 font-medium mr-1 text-xs shrink-0"><i class="fa-solid fa-filter mr-1"></i>絞り込み:</span>
+                <button data-filter="all" class="filter-btn active bg-indigo-600 text-white font-medium px-3.5 py-1.5 rounded-lg transition shrink-0">
+                    すべて
+                </button>
+                <button data-filter="unreturned" class="filter-btn bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium px-3.5 py-1.5 rounded-lg transition shrink-0 flex items-center space-x-1">
+                    <span>未返却のみ</span>
+                    <span id="badgeUnreturned" class="bg-blue-100 text-blue-800 text-[10px] font-bold px-1.5 py-0.5 rounded-full">0</span>
+                </button>
+                <button data-filter="overdue" class="filter-btn bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium px-3.5 py-1.5 rounded-lg transition shrink-0 flex items-center space-x-1">
+                    <span class="text-red-600"><i class="fa-solid fa-triangle-exclamation"></i> 延滞中のみ</span>
+                    <span id="badgeOverdue" class="bg-red-100 text-red-800 text-[10px] font-bold px-1.5 py-0.5 rounded-full">0</span>
+                </button>
+                <button data-filter="returned" class="filter-btn bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium px-3.5 py-1.5 rounded-lg transition shrink-0">
+                    返却済み
+                </button>
+            </div>
+        </div>
+
+        <!-- Items List Grid -->
+        <div id="itemList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <!-- Loading Indicator -->
+            <div class="col-span-full py-12 text-center text-gray-400">
+                <i class="fa-solid fa-circle-notch fa-spin text-3xl text-indigo-500 mb-2"></i>
+                <p class="text-sm">データを読み込み中...</p>
+            </div>
+        </div>
+
+        <!-- Empty State Message -->
+        <div id="emptyState" class="hidden text-center py-16 bg-white rounded-2xl border border-dashed border-gray-300">
+            <div class="w-16 h-16 bg-gray-100 text-gray-400 rounded-full flex items-center justify-center mx-auto mb-3 text-2xl">
+                <i class="fa-solid fa-box-open"></i>
+            </div>
+            <h3 class="text-gray-700 font-bold text-base">該当する貸出データがありません</h3>
+            <p class="text-gray-400 text-xs mt-1">検索ワードを変更するか、新しい貸出を登録してください。</p>
+        </div>
+
+    </main>
+
+    <!-- Modal: Add New Borrowing Record -->
+    <div id="addModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden transform transition-all">
+            <!-- Modal Header -->
+            <div class="bg-indigo-700 px-6 py-4 text-white flex justify-between items-center">
+                <h2 class="text-lg font-bold flex items-center space-x-2">
+                    <i class="fa-solid fa-pen-to-square"></i>
+                    <span>新規貸出の登録</span>
+                </h2>
+                <button id="closeAddModalBtn" class="text-indigo-200 hover:text-white p-1 rounded-lg transition">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+
+            <!-- Error Banner in Modal -->
+            <div id="modalError" class="hidden bg-red-50 border-l-4 border-red-500 p-3 mx-6 mt-4 rounded-r-lg text-xs text-red-700 flex items-center space-x-2">
+                <i class="fa-solid fa-circle-exclamation text-red-500 text-sm shrink-0"></i>
+                <span id="modalErrorMsg">未入力の項目があります。入力してください。</span>
+            </div>
+
+            <!-- Modal Form -->
+            <form id="addForm" class="p-6 space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-gray-700 mb-1">
+                        備品名 <span class="text-red-500">*</span>
+                    </label>
+                    <input type="text" id="itemName" placeholder="例: インパクトドライバー, 3Dプリンター, テスター" 
+                           class="w-full px-3.5 py-2 text-sm bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:outline-none">
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">
+                            カテゴリ <span class="text-red-500">*</span>
+                        </label>
+                        <select id="itemCategory" class="w-full px-3.5 py-2 text-sm bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:outline-none">
+                            <option value="工具">電動・手工具</option>
+                            <option value="測定・検査機材">測定・検査機材</option>
+                            <option value="AV・撮影機器">AV・撮影機器</option>
+                            <option value="PC・周辺機器">PC・周辺機器</option>
+                            <option value="文房具・事務用品">文房具・事務用品</option>
+                            <option value="その他">その他</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">
+                            借りた人の名前 <span class="text-red-500">*</span>
+                        </label>
+                        <input type="text" id="borrowerName" placeholder="例: 山田 太郎 (3年1組)" 
+                               class="w-full px-3.5 py-2 text-sm bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:outline-none">
+                        <p id="autoNameNotice" class="text-[10px] text-indigo-600 mt-1 hidden">
+                            <i class="fa-solid fa-circle-check"></i> ログイン中のアカウント名を自動補完しました
+                        </p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">
+                            貸出日
+                        </label>
+                        <input type="date" id="borrowDate" class="w-full px-3.5 py-2 text-sm bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:outline-none">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">
+                            返却予定日 <span class="text-red-500">*</span>
+                        </label>
+                        <input type="date" id="dueDate" class="w-full px-3.5 py-2 text-sm bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:outline-none">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-gray-700 mb-1">
+                        用途・メモ (任意)
+                    </label>
+                    <textarea id="itemNotes" rows="2" placeholder="例: 実習B棟での電子工作課題に使用" 
+                              class="w-full px-3.5 py-2 text-sm bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:outline-none"></textarea>
+                </div>
+
+                <div class="pt-3 flex space-x-3">
+                    <button type="button" id="cancelAddBtn" class="w-1/3 py-2.5 border border-gray-300 text-gray-700 rounded-xl font-bold text-sm hover:bg-gray-50 transition">
+                        キャンセル
+                    </button>
+                    <button type="submit" id="saveAddBtn" class="w-2/3 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm shadow-md transition flex items-center justify-center space-x-1">
+                        <i class="fa-solid fa-check"></i>
+                        <span>貸出を登録する</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Firebase Configuration Setup -->
+    <div id="configModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden">
+            <div class="bg-gray-800 px-6 py-4 text-white flex justify-between items-center">
+                <h2 class="text-lg font-bold flex items-center space-x-2">
+                    <i class="fa-solid fa-sliders text-amber-400"></i>
+                    <span>Firebase設定</span>
+                </h2>
+                <button id="closeConfigModalBtn" class="text-gray-400 hover:text-white p-1 rounded-lg transition">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+
+            <div class="p-6 space-y-4">
+                <p class="text-xs text-gray-600 leading-relaxed">
+                    Firebase Consoleで作成したWebアプリの<code class="bg-gray-100 px-1 py-0.5 rounded text-indigo-600 font-mono">firebaseConfig</code>を入力してください。ブラウザ（LocalStorage）に保持されます。
+                </p>
+
+                <div>
+                    <label class="block text-xs font-bold text-gray-700 mb-1">Firebase Config JSON または オブジェクト</label>
+                    <textarea id="configJsonInput" rows="7" placeholder='{
+  "apiKey": "AIzaSy...",
+  "authDomain": "your-app.firebaseapp.com",
+  "projectId": "your-app",
+  "storageBucket": "your-app.appspot.com",
+  "messagingSenderId": "123456...",
+  "appId": "1:123456..."
+}' class="w-full p-3 font-mono text-xs bg-gray-900 text-green-400 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+                </div>
+
+                <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800 flex items-start space-x-2">
+                    <i class="fa-solid fa-lightbulb text-amber-600 text-sm mt-0.5 shrink-0"></i>
+                    <p>設定を入力せずに「デモモード」で使用することも可能です。デモモードではブラウザ内（ローカル）で全機能をお試しいただけます。</p>
+                </div>
+
+                <div class="pt-2 flex flex-col sm:flex-row gap-2">
+                    <button id="saveConfigBtn" class="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm rounded-xl shadow transition">
+                        設定を保存して再読み込み
+                    </button>
+                    <button id="clearConfigBtn" class="py-2.5 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-sm rounded-xl transition">
+                        リセット (デモモード)
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Help & GitHub Pages Instructions -->
+    <div id="helpModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-2xl max-w-2xl w-full max-h-[85vh] shadow-2xl flex flex-col overflow-hidden">
+            <div class="bg-indigo-900 px-6 py-4 text-white flex justify-between items-center">
+                <h2 class="text-lg font-bold flex items-center space-x-2">
+                    <i class="fa-solid fa-rocket text-amber-300"></i>
+                    <span>GitHub Pagesで公開する手順</span>
+                </h2>
+                <button id="closeHelpModalBtn" class="text-indigo-200 hover:text-white p-1 rounded-lg transition">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+
+            <div class="p-6 overflow-y-auto space-y-5 text-xs sm:text-sm text-gray-700 leading-relaxed">
+                <div class="border-b pb-4">
+                    <h3 class="font-bold text-indigo-900 text-base mb-2 flex items-center space-x-2">
+                        <span class="bg-indigo-100 text-indigo-700 w-6 h-6 rounded-full inline-flex items-center justify-center text-xs">1</span>
+                        <span>このコードをファイルとして保存</span>
+                    </h3>
+                    <p class="ml-8 text-gray-600">このページの完全なコードを <code class="bg-gray-100 px-1.5 py-0.5 rounded text-indigo-600 font-bold">index.html</code> という名前でパソコン上に保存します。</p>
+                </div>
+
+                <div class="border-b pb-4">
+                    <h3 class="font-bold text-indigo-900 text-base mb-2 flex items-center space-x-2">
+                        <span class="bg-indigo-100 text-indigo-700 w-6 h-6 rounded-full inline-flex items-center justify-center text-xs">2</span>
+                        <span>GitHubリポジトリを作成 & プッシュ</span>
+                    </h3>
+                    <ol class="list-disc ml-12 space-y-1 text-gray-600">
+                        <li>GitHubにログインし、新しいPublic（公開）リポジトリを作成します。</li>
+                        <li>作成したリポジトリに <code class="bg-gray-100 px-1.5 py-0.5 rounded text-indigo-600 font-bold">index.html</code> をコミット・アップロードします。</li>
+                    </ol>
+                </div>
+
+                <div class="border-b pb-4">
+                    <h3 class="font-bold text-indigo-900 text-base mb-2 flex items-center space-x-2">
+                        <span class="bg-indigo-100 text-indigo-700 w-6 h-6 rounded-full inline-flex items-center justify-center text-xs">3</span>
+                        <span>GitHub Pagesを有効化</span>
+                    </h3>
+                    <p class="ml-8 text-gray-600">リポジトリの <b>Settings &gt; Pages</b> を開き、Sourceを <code class="bg-gray-100 px-1.5 py-0.5 rounded">main (or master) branch</code> に設定してSaveします。数分でURLが発行されます。</p>
+                </div>
+
+                <div>
+                    <h3 class="font-bold text-indigo-900 text-base mb-2 flex items-center space-x-2">
+                        <span class="bg-indigo-100 text-indigo-700 w-6 h-6 rounded-full inline-flex items-center justify-center text-xs">4</span>
+                        <span>Firebase Authenticationの「承認済みドメイン」に追加</span>
+                    </h3>
+                    <p class="ml-8 text-gray-600">
+                        Googleログインを有効にするため、Firebase Consoleの <b>Authentication &gt; Settings &gt; Authorized domains</b> に、GitHub Pagesのドメイン（例: <code class="bg-gray-100 px-1.5 py-0.5 rounded text-indigo-600 font-bold">username.github.io</code>）を追加してください。
+                    </p>
+                </div>
+            </div>
+
+            <div class="bg-gray-50 px-6 py-3 border-t text-right">
+                <button id="dismissHelpBtn" class="bg-indigo-600 text-white font-bold px-5 py-2 rounded-xl hover:bg-indigo-700 transition text-sm">
+                    理解しました
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Toast Element -->
+    <div id="toast" class="fixed bottom-5 right-5 z-50 bg-gray-900 text-white px-4 py-3 rounded-xl shadow-2xl transition transform translate-y-20 opacity-0 flex items-center space-x-3 max-w-md">
+        <i id="toastIcon" class="text-indigo-400 text-lg"></i>
+        <span id="toastMsg" class="text-sm"></span>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-gray-200 py-4 mt-auto">
+        <div class="max-w-7xl mx-auto px-4 text-center text-xs text-gray-400">
+            学校備品貸出管理 Web App &bull; Powered by Firebase & GitHub Pages
+        </div>
+    </footer>
+
+    <!-- JavaScript Module Logic -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // APP STATE
+        let isFirebaseActive = false;
+        let db = null;
+        let auth = null;
+        let currentUser = null;
+        let allItems = [];
+        let currentFilter = 'all';
+        let searchQuery = '';
+
+        // Default Demo Data when Firebase is not configured
+        let demoItems = [
+            {
+                id: 'demo-1',
+                name: 'マキタ 電動インパクトドライバーセット',
+                category: '工具',
+                borrower: '高橋 健太 (機械科2年)',
+                borrowDate: getRelativeDate(-5),
+                dueDate: getRelativeDate(-1), // Overdue
+                notes: '実習棟Aにて使用中',
+                status: 'unreturned',
+                createdAt: Date.now() - 500000
+            },
+            {
+                id: 'demo-2',
+                name: 'デジタルオシロスコープ 100MHz',
+                category: '測定・検査機材',
+                borrower: '佐藤 美咲 (電気科3年)',
+                borrowDate: getRelativeDate(-2),
+                dueDate: getRelativeDate(3), // On time
+                notes: '回路製作実験用',
+                status: 'unreturned',
+                createdAt: Date.now() - 300000
+            },
+            {
+                id: 'demo-3',
+                name: '4Kビデオカメラ (三脚セット)',
+                category: 'AV・撮影機器',
+                borrower: '文化祭実行委員会',
+                borrowDate: getRelativeDate(-10),
+                dueDate: getRelativeDate(-3), // Overdue & Returned test
+                notes: '事前告知動画撮影用',
+                status: 'returned',
+                returnedAt: getRelativeDate(-2),
+                createdAt: Date.now() - 1000000
+            }
+        ];
+
+        // Date formatting helpers
+        function getRelativeDate(daysOffset) {
+            const d = new Date();
+            d.setDate(d.getDate() + daysOffset);
+            return d.toISOString().split('T')[0];
+        }
+
+        function getTodayString() {
+            return new Date().toISOString().split('T')[0];
+        }
+
+        function isOverdue(dueDateString, status) {
+            if (status === 'returned') return false;
+            const today = getTodayString();
+            return dueDateString < today;
+        }
+
+        // Toast Notification Function
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            const toastMsg = document.getElementById('toastMsg');
+            const toastIcon = document.getElementById('toastIcon');
+
+            toastMsg.textContent = message;
+            
+            if (type === 'success') {
+                toastIcon.className = 'fa-solid fa-circle-check text-emerald-400 text-lg';
+            } else if (type === 'error') {
+                toastIcon.className = 'fa-solid fa-triangle-exclamation text-red-400 text-lg';
+            } else {
+                toastIcon.className = 'fa-solid fa-circle-info text-indigo-400 text-lg';
+            }
+
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            toast.classList.add('translate-y-0', 'opacity-100');
+
+            setTimeout(() => {
+                toast.classList.remove('translate-y-0', 'opacity-100');
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3500);
+        }
+
+        // Initialize Firebase or Fallback to Demo Mode
+        function setupFirebase() {
+            const savedConfig = localStorage.getItem('school_app_firebase_config');
+            const banner = document.getElementById('statusBanner');
+            const statusIcon = document.getElementById('statusIcon');
+            const statusTitle = document.getElementById('statusTitle');
+            const statusDesc = document.getElementById('statusDesc');
+            const statusActionBtn = document.getElementById('statusActionBtn');
+
+            if (savedConfig) {
+                try {
+                    const config = JSON.parse(savedConfig);
+                    const app = initializeApp(config);
+                    db = getFirestore(app);
+                    auth = getAuth(app);
+                    isFirebaseActive = true;
+
+                    // Setup Auth listener
+                    onAuthStateChanged(auth, (user) => {
+                        currentUser = user;
+                        updateAuthUI();
+                    });
+
+                    // Setup Firestore sync
+                    listenToFirestore();
+
+                    banner.className = 'mb-6 p-4 rounded-xl shadow-sm border flex items-center justify-between bg-emerald-50 border-emerald-200 text-emerald-900';
+                    statusIcon.className = 'fa-solid fa-cloud-check text-emerald-600 text-xl';
+                    statusTitle.textContent = 'Firebase リアルタイム同期中';
+                    statusDesc.textContent = 'クラウドデータベースと正常に接続されています。';
+                    statusActionBtn.className = 'bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition';
+                    statusActionBtn.textContent = '設定変更';
+                    statusActionBtn.onclick = () => openModal('configModal');
+
+                } catch (e) {
+                    console.error('Firebase Setup Error:', e);
+                    showToast('Firebaseの設定が無効です。デモモードで起動します。', 'error');
+                    activateDemoMode();
+                }
+            } else {
+                activateDemoMode();
+            }
+        }
+
+        function activateDemoMode() {
+            isFirebaseActive = false;
+            document.getElementById('authLoading').classList.add('hidden');
+            document.getElementById('loginBtn').classList.remove('hidden');
+
+            const banner = document.getElementById('statusBanner');
+            const statusIcon = document.getElementById('statusIcon');
+            const statusTitle = document.getElementById('statusTitle');
+            const statusDesc = document.getElementById('statusDesc');
+            const statusActionBtn = document.getElementById('statusActionBtn');
+
+            banner.className = 'mb-6 p-4 rounded-xl shadow-sm border flex items-center justify-between bg-amber-50 border-amber-200 text-amber-900';
+            statusIcon.className = 'fa-solid fa-flask text-amber-600 text-xl';
+            statusTitle.textContent = 'デモモードで動作中（ローカルデータ）';
+            statusDesc.textContent = 'Googleログインや複数端末でのリアルタイム共有にはFirebase設定が必要です。';
+            statusActionBtn.className = 'bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition';
+            statusActionBtn.textContent = 'Firebaseを設定';
+            statusActionBtn.onclick = () => openModal('configModal');
+
+            // Load local storage demo items if saved, else default
+            const localSaved = localStorage.getItem('school_app_demo_items');
+            if (localSaved) {
+                try {
+                    allItems = JSON.parse(localSaved);
+                } catch(e) {
+                    allItems = [...demoItems];
+                }
+            } else {
+                allItems = [...demoItems];
+            }
+            renderItems();
+        }
+
+        // Listen to Firestore updates
+        function listenToFirestore() {
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'school-equipment-app';
+            // Path following mandatory RULE 1
+            const itemsCollection = collection(db, 'artifacts', appId, 'public', 'data', 'borrowings');
+
+            onSnapshot(itemsCollection, (snapshot) => {
+                allItems = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+                // Sort client side (RULE 2)
+                allItems.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+                renderItems();
+            }, (error) => {
+                console.error('Firestore snapshot error:', error);
+                showToast('データの取得に失敗しました: ' + error.message, 'error');
+            });
+        }
+
+        // Update User UI State
+        function updateAuthUI() {
+            const authLoading = document.getElementById('authLoading');
+            const loginBtn = document.getElementById('loginBtn');
+            const userProfile = document.getElementById('userProfile');
+            const userAvatar = document.getElementById('userAvatar');
+            const userName = document.getElementById('userName');
+            const borrowerNameInput = document.getElementById('borrowerName');
+            const autoNameNotice = document.getElementById('autoNameNotice');
+
+            authLoading.classList.add('hidden');
+
+            if (currentUser) {
+                loginBtn.classList.add('hidden');
+                userProfile.classList.remove('hidden');
+                userAvatar.src = currentUser.photoURL || 'https://placehold.co/100x100/6366f1/ffffff?text=U';
+                userName.textContent = currentUser.displayName || 'ユーザー';
+
+                // Auto populate borrower name in add modal if empty
+                if (!borrowerNameInput.value) {
+                    borrowerNameInput.value = currentUser.displayName || '';
+                    if (currentUser.displayName) {
+                        autoNameNotice.classList.remove('hidden');
+                    }
+                }
+            } else {
+                loginBtn.classList.remove('hidden');
+                userProfile.classList.add('hidden');
+                autoNameNotice.classList.add('hidden');
+            }
+        }
+
+        // Render Equipment Items List
+        function renderItems() {
+            const itemList = document.getElementById('itemList');
+            const emptyState = document.getElementById('emptyState');
+
+            // Apply Search & Filter Logic
+            const filtered = allItems.filter(item => {
+                const matchesSearch = 
+                    (item.name && item.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
+                    (item.borrower && item.borrower.toLowerCase().includes(searchQuery.toLowerCase())) ||
+                    (item.category && item.category.toLowerCase().includes(searchQuery.toLowerCase()));
+
+                const itemIsOverdue = isOverdue(item.dueDate, item.status);
+
+                if (!matchesSearch) return false;
+
+                if (currentFilter === 'unreturned') {
+                    return item.status === 'unreturned';
+                } else if (currentFilter === 'overdue') {
+                    return itemIsOverdue;
+                } else if (currentFilter === 'returned') {
+                    return item.status === 'returned';
+                }
+                return true;
+            });
+
+            // Update Header Counts
+            const totalCount = allItems.length;
+            const activeCount = allItems.filter(i => i.status === 'unreturned').length;
+            const overdueCount = allItems.filter(i => isOverdue(i.dueDate, i.status)).length;
+            const returnedCount = allItems.filter(i => i.status === 'returned').length;
+
+            document.getElementById('countTotal').textContent = totalCount;
+            document.getElementById('countActive').textContent = activeCount;
+            document.getElementById('countOverdue').textContent = overdueCount;
+            document.getElementById('countReturned').textContent = returnedCount;
+
+            document.getElementById('badgeUnreturned').textContent = activeCount;
+            document.getElementById('badgeOverdue').textContent = overdueCount;
+
+            if (filtered.length === 0) {
+                itemList.innerHTML = '';
+                emptyState.classList.remove('hidden');
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+
+            itemList.innerHTML = filtered.map(item => {
+                const overdue = isOverdue(item.dueDate, item.status);
+                const isReturned = item.status === 'returned';
+
+                let cardBorder = 'border-gray-200 hover:border-indigo-300';
+                let statusBadge = '';
+
+                if (isReturned) {
+                    cardBorder = 'border-emerald-200 bg-emerald-50/20';
+                    statusBadge = `<span class="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
+                        <i class="fa-solid fa-check"></i> <span>返却済み</span>
+                    </span>`;
+                } else if (overdue) {
+                    cardBorder = 'border-red-400 bg-red-50/30 overdue-card ring-2 ring-red-300';
+                    statusBadge = `<span class="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-bold bg-red-600 text-white shadow-sm">
+                        <i class="fa-solid fa-triangle-exclamation"></i> <span>延滞中</span>
+                    </span>`;
+                } else {
+                    cardBorder = 'border-blue-200 bg-blue-50/10';
+                    statusBadge = `<span class="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800">
+                        <i class="fa-solid fa-clock"></i> <span>貸出中</span>
+                    </span>`;
+                }
+
+                return `
+                    <div class="bg-white rounded-2xl p-5 border ${cardBorder} shadow-sm hover:shadow-md transition flex flex-col justify-between">
+                        <div>
+                            <!-- Card Header: Category & Status -->
+                            <div class="flex justify-between items-start gap-2 mb-2">
+                                <span class="bg-gray-100 text-gray-600 font-medium text-[11px] px-2.5 py-0.5 rounded-lg">
+                                    ${escapeHtml(item.category || '備品')}
+                                </span>
+                                ${statusBadge}
+                            </div>
+
+                            <!-- Item Title -->
+                            <h3 class="font-bold text-gray-900 text-base leading-snug mb-3">${escapeHtml(item.name)}</h3>
+
+                            <!-- Details -->
+                            <div class="space-y-2 text-xs text-gray-600 border-t border-b border-gray-100 py-3 my-3">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-gray-400 font-medium"><i class="fa-solid fa-user text-indigo-400 w-4"></i> 借りた人:</span>
+                                    <span class="font-bold text-gray-800">${escapeHtml(item.borrower)}</span>
+                                </div>
+
+                                <div class="flex items-center justify-between">
+                                    <span class="text-gray-400 font-medium"><i class="fa-solid fa-calendar-minus text-indigo-400 w-4"></i> 貸出日:</span>
+                                    <span>${item.borrowDate || '未記録'}</span>
+                                </div>
+
+                                <div class="flex items-center justify-between">
+                                    <span class="text-gray-400 font-medium"><i class="fa-solid fa-calendar-check text-indigo-400 w-4"></i> 返却予定日:</span>
+                                    <span class="font-bold ${overdue ? 'text-red-600 bg-red-100 px-1.5 py-0.5 rounded' : 'text-gray-800'}">
+                                        ${item.dueDate} ${overdue ? '(期限切れ)' : ''}
+                                    </span>
+                                </div>
+
+                                ${item.notes ? `
+                                <div class="pt-1 text-gray-500 italic text-[11px] flex items-start space-x-1">
+                                    <i class="fa-solid fa-note-sticky text-amber-500 mt-0.5 shrink-0"></i>
+                                    <span class="line-clamp-2">${escapeHtml(item.notes)}</span>
+                                </div>
+                                ` : ''}
+                            </div>
+                        </div>
+
+                        <!-- Card Action Bar -->
+                        <div class="flex items-center space-x-2 pt-1">
+                            <button onclick="toggleReturnStatus('${item.id}', ${isReturned})" 
+                                    class="flex-1 py-2 px-3 rounded-xl font-bold text-xs transition flex items-center justify-center space-x-1 shadow-sm ${
+                                        isReturned 
+                                        ? 'bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300' 
+                                        : overdue 
+                                            ? 'bg-red-600 hover:bg-red-700 text-white'
+                                            : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                                    }">
+                                <i class="fa-solid ${isReturned ? 'fa-rotate-left' : 'fa-check'}"></i>
+                                <span>${isReturned ? '未返却に戻す' : '返却済みにする'}</span>
+                            </button>
+
+                            <button onclick="deleteRecord('${item.id}')" 
+                                    title="記録を削除" 
+                                    class="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/[&<>"']/g, function(m) {
+                return {
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    '"': '&quot;',
+                    "'": '&#039;'
+                }[m];
+            });
+        }
+
+        // Toggle Return Status Action
+        window.toggleReturnStatus = async function(id, currentStatusIsReturned) {
+            const newStatus = currentStatusIsReturned ? 'unreturned' : 'returned';
+
+            if (isFirebaseActive && db) {
+                try {
+                    const appId = typeof __app_id !== 'undefined' ? __app_id : 'school-equipment-app';
+                    const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'borrowings', id);
+                    await updateDoc(docRef, {
+                        status: newStatus,
+                        returnedAt: newStatus === 'returned' ? getTodayString() : null
+                    });
+                    showToast(newStatus === 'returned' ? '返却済みに変更しました！' : '未返却状態に戻しました');
+                } catch (e) {
+                    console.error('Update error:', e);
+                    showToast('ステータスの更新に失敗しました: ' + e.message, 'error');
+                }
+            } else {
+                // Demo Mode Local Update
+                const item = allItems.find(i => i.id === id);
+                if (item) {
+                    item.status = newStatus;
+                    item.returnedAt = newStatus === 'returned' ? getTodayString() : null;
+                    saveDemoState();
+                    renderItems();
+                    showToast(newStatus === 'returned' ? '【デモ】返却済みに変更しました' : '【デモ】未返却に戻しました');
+                }
+            }
+        };
+
+        // Delete Record Action
+        window.deleteRecord = async function(id) {
+            // Using a clean custom notification instead of alert/confirm
+            if (!window.confirmDeleteId) {
+                window.confirmDeleteId = id;
+                showToast('もう一度削除ボタンを押すと完全に削除されます', 'error');
+                setTimeout(() => { window.confirmDeleteId = null; }, 4000);
+                return;
+            }
+
+            if (window.confirmDeleteId === id) {
+                window.confirmDeleteId = null;
+                if (isFirebaseActive && db) {
+                    try {
+                        const appId = typeof __app_id !== 'undefined' ? __app_id : 'school-equipment-app';
+                        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'borrowings', id));
+                        showToast('記録を削除しました');
+                    } catch (e) {
+                        showToast('削除に失敗しました: ' + e.message, 'error');
+                    }
+                } else {
+                    allItems = allItems.filter(i => i.id !== id);
+                    saveDemoState();
+                    renderItems();
+                    showToast('【デモ】記録を削除しました');
+                }
+            }
+        };
+
+        function saveDemoState() {
+            localStorage.setItem('school_app_demo_items', JSON.stringify(allItems));
+        }
+
+        // Add Form Submission with Validation
+        document.getElementById('addForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const name = document.getElementById('itemName').value.trim();
+            const category = document.getElementById('itemCategory').value;
+            const borrower = document.getElementById('borrowerName').value.trim();
+            const borrowDate = document.getElementById('borrowDate').value;
+            const dueDate = document.getElementById('dueDate').value;
+            const notes = document.getElementById('itemNotes').value.trim();
+            const modalError = document.getElementById('modalError');
+            const modalErrorMsg = document.getElementById('modalErrorMsg');
+
+            // Validation Check
+            if (!name || !borrower || !dueDate) {
+                modalErrorMsg.textContent = '「備品名」「借りた人の名前」「返却予定日」は必須項目です。';
+                modalError.classList.remove('hidden');
+                return;
+            }
+
+            modalError.classList.add('hidden');
+
+            const newItem = {
+                name,
+                category,
+                borrower,
+                borrowDate: borrowDate || getTodayString(),
+                dueDate,
+                notes,
+                status: 'unreturned',
+                createdAt: Date.now()
+            };
+
+            const saveBtn = document.getElementById('saveAddBtn');
+            saveBtn.disabled = true;
+            saveBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> <span>保存中...</span>`;
+
+            if (isFirebaseActive && db) {
+                try {
+                    const appId = typeof __app_id !== 'undefined' ? __app_id : 'school-equipment-app';
+                    const itemsCollection = collection(db, 'artifacts', appId, 'public', 'data', 'borrowings');
+                    await addDoc(itemsCollection, newItem);
+                    showToast('新しい貸出記録を登録しました！', 'success');
+                    closeModal('addModal');
+                    resetAddForm();
+                } catch (err) {
+                    console.error('Error adding doc:', err);
+                    modalErrorMsg.textContent = '保存エラー: ' + err.message;
+                    modalError.classList.remove('hidden');
+                }
+            } else {
+                // Demo Mode
+                newItem.id = 'demo-' + Date.now();
+                allItems.unshift(newItem);
+                saveDemoState();
+                renderItems();
+                showToast('【デモ】新しい貸出記録を登録しました！', 'success');
+                closeModal('addModal');
+                resetAddForm();
+            }
+
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = `<i class="fa-solid fa-check"></i> <span>貸出を登録する</span>`;
+        });
+
+        function resetAddForm() {
+            document.getElementById('itemName').value = '';
+            document.getElementById('borrowerName').value = currentUser ? currentUser.displayName || '' : '';
+            document.getElementById('itemNotes').value = '';
+            document.getElementById('borrowDate').value = getTodayString();
+            document.getElementById('dueDate').value = getRelativeDate(7); // Default 1 week return
+            document.getElementById('modalError').classList.add('hidden');
+        }
+
+        // Google Sign-In Handler
+        document.getElementById('loginBtn').addEventListener('click', async () => {
+            if (!isFirebaseActive || !auth) {
+                showToast('先に右上「Firebase設定」で接続設定を行ってください。', 'error');
+                openModal('configModal');
+                return;
+            }
+
+            try {
+                const provider = new GoogleAuthProvider();
+                await signInWithPopup(auth, provider);
+                showToast('Googleアカウントでログインしました', 'success');
+            } catch (error) {
+                console.error('Google Sign-In Error:', error);
+                showToast('ログインに失敗しました: ' + error.message, 'error');
+            }
+        });
+
+        // Logout Handler
+        document.getElementById('logoutBtn').addEventListener('click', async () => {
+            if (auth) {
+                await signOut(auth);
+                showToast('ログアウトしました');
+            }
+        });
+
+        // Config Form Save Listener
+        document.getElementById('saveConfigBtn').addEventListener('click', () => {
+            const rawVal = document.getElementById('configJsonInput').value.trim();
+            if (!rawVal) {
+                showToast('設定を入力するかリセットを押してください', 'error');
+                return;
+            }
+
+            try {
+                // Validate JSON or Object
+                let configObj;
+                if (rawVal.startsWith('{')) {
+                    configObj = JSON.parse(rawVal);
+                } else {
+                    throw new Error('正しいJSON形式で入力してください。');
+                }
+
+                localStorage.setItem('school_app_firebase_config', JSON.stringify(configObj));
+                showToast('設定を保存しました。ページを再読み込みします...', 'success');
+                setTimeout(() => window.location.reload(), 1200);
+            } catch (e) {
+                showToast('Firebase Configの解析に失敗しました: ' + e.message, 'error');
+            }
+        });
+
+        // Clear Config Listener
+        document.getElementById('clearConfigBtn').addEventListener('click', () => {
+            localStorage.removeItem('school_app_firebase_config');
+            showToast('Firebase設定をリセットしました（デモモード）');
+            setTimeout(() => window.location.reload(), 1000);
+        });
+
+        // Filter Buttons Setup
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                document.querySelectorAll('.filter-btn').forEach(b => {
+                    b.classList.remove('active', 'bg-indigo-600', 'text-white');
+                    b.classList.add('bg-gray-100', 'text-gray-700');
+                });
+
+                const target = e.currentTarget;
+                target.classList.remove('bg-gray-100', 'text-gray-700');
+                target.classList.add('active', 'bg-indigo-600', 'text-white');
+
+                currentFilter = target.getAttribute('data-filter');
+                renderItems();
+            });
+        });
+
+        // Search Input Setup
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+            searchQuery = e.target.value.trim();
+            renderItems();
+        });
+
+        // Modal Helpers
+        function openModal(id) {
+            document.getElementById(id).classList.remove('hidden');
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.add('hidden');
+        }
+
+        document.getElementById('openAddModalBtn').addEventListener('click', () => {
+            resetAddForm();
+            openModal('addModal');
+        });
+
+        document.getElementById('closeAddModalBtn').addEventListener('click', () => closeModal('addModal'));
+        document.getElementById('cancelAddBtn').addEventListener('click', () => closeModal('addModal'));
+
+        document.getElementById('configBtn').addEventListener('click', () => {
+            const currentConfig = localStorage.getItem('school_app_firebase_config');
+            if (currentConfig) {
+                document.getElementById('configJsonInput').value = JSON.stringify(JSON.parse(currentConfig), null, 2);
+            }
+            openModal('configModal');
+        });
+        document.getElementById('closeConfigModalBtn').addEventListener('click', () => closeModal('configModal'));
+
+        document.getElementById('helpBtn').addEventListener('click', () => openModal('helpModal'));
+        document.getElementById('closeHelpModalBtn').addEventListener('click', () => closeModal('helpModal'));
+        document.getElementById('dismissHelpBtn').addEventListener('click', () => closeModal('helpModal'));
+
+        // Initialize App on DOM Ready
+        window.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('borrowDate').value = getTodayString();
+            document.getElementById('dueDate').value = getRelativeDate(7);
+            setupFirebase();
+        });
+    </script>
+</body>
+</html>
